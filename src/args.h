@@ -17,8 +17,6 @@ typedef struct {
     char target_addr[255];
 } args_t;
 
-err_t getopts(args_t*, int, char**);
-
-int get_ai_family(args_t*);
+void getopts(args_t*, int, char**);
 
 #endif

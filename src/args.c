@@ -1,16 +1,9 @@
 #include "args.h"
 
 /**
- *
- */
-int get_ai_family(args_t* args) {
-    return args->ipv6 == 1 ? AF_INET6 : AF_INET;
-}
-
-/**
  * 
  */
-err_t getopts(args_t* args, int argc, char** argv) {
+void getopts(args_t* args, int argc, char** argv) {
     // Reset args
     memset(args, 0, sizeof(args_t));
 
@@ -32,20 +25,20 @@ err_t getopts(args_t* args, int argc, char** argv) {
         }
         else if (strcmp(arg, "-s") == 0) {
             if (i + 1 >= argc) {
-                return SOURCE_MISSING;
+                exit_error(1, "Source address is not specified.");
             }
 
             strcpy(args->source_addr, argv[++i]);
         }
         else if (strcmp(arg, "-p") == 0) {
             if (i + 1 >= argc) {
-                return PORT_MISSING;
+                exit_error(1, "Port is not specified.");
             }
 
             int port = atoi(argv[++i]);
 
             if (port <= 0) {
-                return INVALID_PORT;
+                exit_error(1, "Port is not valid.");
             }
 
             snprintf(args->port, sizeof(args->port), "%d", port);
@@ -54,13 +47,11 @@ err_t getopts(args_t* args, int argc, char** argv) {
             strcpy(args->target_addr, arg);
         }
         else {
-            return UNKNOWN_OPTION;
+            exit_error(1, "Unknown option.");
         }
     }
 
     if (args->target_addr == 0) {
-        return TARGET_MISSING;
+        exit_error(1, "Target address is not specified.");
     }
-
-    return OK;
 }

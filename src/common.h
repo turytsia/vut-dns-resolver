@@ -1,6 +1,9 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <stdlib.h>
+#include <stdio.h>
+
 typedef enum {
     OK = 0,
     UNKNOWN_OPTION,
@@ -9,5 +12,7 @@ typedef enum {
     SOURCE_MISSING,
     TARGET_MISSING
 } err_t;
+
+void exit_error(err_t err, const char* message);
 
 #endif
