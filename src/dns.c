@@ -18,7 +18,29 @@ void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, 
 void compress(unsigned char* dest, char* src, int len);
 void compress_domain_name(unsigned char* dest, char* src);
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n);
+void print_packet(unsigned char* packet, int len);
 
+void print_packet(unsigned char* packet, int len) {
+    int i, j, cols;
+    for (i = 0; i < len; i += 16) {
+        printf("\n0x%04x:", i);
+
+        cols = i + 16;
+
+        for (j = i; j < cols; j++) {
+            if (j < len)
+                printf(" %02x", packet[j]);
+            else
+                printf("   ");
+        }
+        printf(" ");
+        for (j = i; cols < len ? j < cols : j < len; j++)
+            printf("%c", isprint(packet[j]) ? packet[j] : '.');
+    }
+    printf("\n");
+}
+// TODO Avoid DNSSEC
+// TODO 
 int main(int argc, char** argv) {
 
     args_t args; // 
@@ -80,16 +102,17 @@ int main(int argc, char** argv) {
 
     printf("Authoritative: %s, Recursive: %s, Truncated: %s\n", dns_header->aa ? YES : NO, dns_header->rd ? YES : NO, dns_header->tc ? YES : NO);
     printf("Question section (%d)\n", htons(dns_header->qdcount));
+    
     printf(" %s, %s, %s\n", args.target_addr, get_dns_type(dns_question->qtype), get_dns_class(dns_question->qclass));
 
     printf("Answer section (%d)\n", htons(dns_header->ancount));
-    print_rr(pointer, buffer, dns_header->ancount);
+    print_rr(pointer, buffer, htons(dns_header->ancount));
     
     printf("Authority section (%d)\n", htons(dns_header->nscount));
-    print_rr(pointer, buffer, dns_header->nscount);
+    print_rr(pointer, buffer, htons(dns_header->nscount));
 
     printf("Additional section (%d)\n", htons(dns_header->arcount));
-    print_rr(pointer, buffer, dns_header->arcount);
+    print_rr(pointer, buffer, htons(dns_header->arcount));
 
     return 0;
 }
@@ -106,34 +129,36 @@ void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
     for (int i = 0; i < n; i++) {
         // Parse the name in the answer section
         char name[256] = { 0 };
-
-        parse_domain_name(pointer, buffer, name);
         dns_rr_t* dns_rr = (dns_rr_t*)(pointer + sizeof(short));
+        parse_domain_name(pointer, buffer, name);
 
-        printf(" %s, %s, %s, %d,", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl));
+        printf(" %s, %s, %s, %d, ", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl));
 
         switch (ntohs(dns_rr->type)) {
-        case A:
+        case A:{
             // Extract IPv4 address 
             struct in_addr ipv4_addr;
             memcpy(&ipv4_addr, pointer + sizeof(dns_rr_t), sizeof(struct in_addr));
             char ip_address[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &ipv4_addr, ip_address, INET_ADDRSTRLEN);
-            printf(" %s\n", ip_address);
+            printf("%s\n", ip_address);
             break;
-        case CNAME:
+        }
+        case CNAME:{
             // Extract CNAME data
-            char cname[256];
+            char cname[256] = { 0 };
             parse_domain_name(pointer + sizeof(dns_rr_t), buffer, cname);
-            printf(" %s\n", cname);
+            printf("%s\n", cname);
             break;
-        case AAAA:
+        }
+        case AAAA:{
             struct in6_addr ipv6_addr;
             memcpy(&ipv6_addr, pointer + sizeof(dns_rr_t), sizeof(struct in6_addr));
             char ip_address[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6, &ipv6_addr, ip_address, INET6_ADDRSTRLEN);
-            printf(" %s\n", ip_address);
+            printf("%s\n", ip_address);
             break;
+        }
         default:
             printf(" %s is not supported yet.\n", get_dns_type(ntohs(dns_rr->type)));
         }
@@ -184,6 +209,8 @@ void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, 
         close(sockt);
         exit_error(1, "recvfrom");
     }
+
+    print_packet(buffer, bytes_received);
 
     close(sockt);
 }
