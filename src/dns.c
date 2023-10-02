@@ -110,35 +110,32 @@ void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
         parse_domain_name(pointer, buffer, name);
         dns_rr_t* dns_rr = (dns_rr_t*)(pointer + sizeof(short));
 
-        // Handle different types of resource records
-        if (ntohs(dns_rr->type) == 1) { // A record
+        printf(" %s, %s, %s, %d,", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl));
+
+        switch (ntohs(dns_rr->type)) {
+        case A:
             // Extract IPv4 address 
             struct in_addr ipv4_addr;
             memcpy(&ipv4_addr, pointer + sizeof(dns_rr_t), sizeof(struct in_addr));
             char ip_address[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &ipv4_addr, ip_address, INET_ADDRSTRLEN);
-            printf(" %s, %s, %s, %d, %s\n", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl), ip_address);
-        }
-        else if (ntohs(dns_rr->type) == 5) { // CNAME record
+            printf(" %s\n", ip_address);
+            break;
+        case CNAME:
             // Extract CNAME data
             char cname[256];
             parse_domain_name(pointer + sizeof(dns_rr_t), buffer, cname);
-            printf(" %s, %s, %s, %d, %s\n", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl), cname);
-        }
-        else if (ntohs(dns_rr->type) == 28) {
+            printf(" %s\n", cname);
+            break;
+        case AAAA:
             struct in6_addr ipv6_addr;
             memcpy(&ipv6_addr, pointer + sizeof(dns_rr_t), sizeof(struct in6_addr));
             char ip_address[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6, &ipv6_addr, ip_address, INET6_ADDRSTRLEN);
-            printf(" %s, %s, %s, %d, %s\n", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl), ip_address);
-        }
-        else if (ntohs(dns_rr->type) == 6) { // A record
-            // Extract IPv4 address 
-            struct in_addr ipv4_addr;
-            memcpy(&ipv4_addr, pointer + sizeof(dns_rr_t), sizeof(struct in_addr));
-            char ip_address[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &ipv4_addr, ip_address, INET_ADDRSTRLEN);
-            printf(" %s, %s, %s, %d, %s\n", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl), ip_address);
+            printf(" %s\n", ip_address);
+            break;
+        default:
+            printf(" %s is not supported yet.\n", get_dns_type(ntohs(dns_rr->type)));
         }
 
         pointer += sizeof(dns_rr_t) + ntohs(dns_rr->data_len);
