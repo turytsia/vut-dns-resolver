@@ -35,7 +35,8 @@ typedef enum {
     HINFO,
     MINFO,
     MX,
-    TXT
+    TXT,
+    AAAA = 28
 } type_t;
 
 typedef enum {
@@ -61,7 +62,8 @@ const char* type_names[] = {
     [HINFO] = "HINFO",
     [MINFO] = "MINFO",
     [MX] = "MX",
-    [TXT] = "TXT"
+    [TXT] = "TXT",
+    [AAAA] = "AAAA"
 };
 
 const char* class_names[] = {
