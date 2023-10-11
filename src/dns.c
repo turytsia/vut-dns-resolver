@@ -19,6 +19,7 @@ void compress(unsigned char* dest, char* src, int len);
 void compress_domain_name(unsigned char* dest, char* src);
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n);
 void print_packet(unsigned char* packet, int len);
+void create_dns_reverse_query(args_t* args, unsigned char* query, char* domain);
 
 void print_packet(unsigned char* packet, int len) {
     int i, j, cols;
@@ -77,13 +78,21 @@ int main(int argc, char** argv) {
         exit_error(1, "Unsupported address family");
     }
 
-    create_dns_query(&args, query, args.target_addr);
+    if (args.reverse) {
+        create_dns_reverse_query(&args, query, args.target_addr);
+    }
+    else {
+        create_dns_query(&args, query, args.target_addr);
+    }
 
     const int dns_header_size = sizeof(dns_header_t);
     const int dns_question_size = sizeof(dns_question_t);
     const int qname_size = (strlen((char*)(query + dns_header_size)) + 1);
     const int query_size = (dns_header_size + qname_size + dns_question_size);
+    // printf("%d\n", qname_size);
+    // const int query_size = (dns_header_size + qname_size + sizeof(dns_rr_t) + 15);
 
+    print_packet(query, query_size);
 
     // Buffer to store received data
     unsigned char buffer[MAX_BUFF] = { 0 };
@@ -294,7 +303,67 @@ void create_dns_query(args_t* args, unsigned char* query, char* domain) {
     int len = strlen((char*)qname);
 
     dns_question_t* qinfo = (dns_question_t*)(query + sizeof(dns_header_t) + len + 1);
-    qinfo->qtype = htons(args->ipv6 ? AAAA : A); // TODO Set 5 to test CNAME
+    qinfo->qtype = htons(args->ipv6 ? AAAA : args->reverse ? PTR : A); // TODO Set 5 to test CNAME
     qinfo->qclass = htons(1);
 
+}
+
+void create_dns_reverse_query(args_t* args, unsigned char* query, char* domain) {
+    dns_header_t dns_header = {
+        .id = htons(getpid()),      // Set the ID to X (you can change this value)
+        .qr = 0,                    // Query (0) or Response (1)
+        .opcode = 0,                // Standard query (0)
+        .aa = 0,                    // Authoritative (0)
+        .tc = 0,                    // Truncated (0)
+        .rd = args->recursive,      // Recursion Desired (X)
+        .ra = 0,                    // Recursion Available (0)
+        .z = 0,                     // Reserved, set to 0
+        .cd = 0,
+        .ad = 0,
+        .rcode = 0,                 // Response code, set to 0 for a query
+        .qdcount = htons(1),        // Number of questions, in network byte order
+        .ancount = 0,               // Number of answers, set to 0 for a query
+        .nscount = 0,               // Number of authority records, set to 0 for a query
+        .arcount = 0                // Number of additional records, set to 0 for a query
+    };
+
+    // Combine header and question into the final query packet
+    memcpy(query, &dns_header, sizeof(dns_header));
+
+    unsigned char* qname = (unsigned char*)(query + sizeof(dns_header_t));
+
+    for (char* token = strtok(domain, "."); token != NULL; token = strtok(NULL, ".")) {
+        char buf[MAX_BUFF] = { 0 };
+
+        strcpy(buf, (char*)qname);
+        if (*buf != 0) {
+            sprintf((char*)qname, "%s.%s", token, buf);
+        }
+        else {
+            sprintf((char*)qname, "%s.", token);
+        }
+    }
+
+    char buf[MAX_BUFF] = { 0 };
+
+
+    strcat((char*)qname, "IN-ADDR.ARPA");
+
+    printf("%s\n", qname);
+
+    compress_domain_name((unsigned char*)buf, (char*)qname);
+
+    strcpy((char*)qname, buf);
+
+    for (int i = 0; i < (int)strlen((char*)qname); i++) {
+        printf("%d ", qname[i]);
+    }
+
+    printf("%s\n", qname);
+
+    int len = strlen((char*)qname);
+
+    dns_question_t* qinfo = (dns_question_t*)(qname + len + 1);
+    qinfo->qtype = htons(PTR); 
+    qinfo->qclass = htons(1); 
 }
