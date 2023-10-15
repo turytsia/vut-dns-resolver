@@ -4,8 +4,6 @@
  * 
  */
 void getopts(args_t* args, int argc, char** argv) {
-    // Reset args
-    memset(args, 0, sizeof(args_t));
 
     // Set up default arguments
     strcpy(args->port, "53");

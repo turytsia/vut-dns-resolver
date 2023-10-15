@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 
-#include "common.h"
+#include "error.h"
 
 typedef struct {
     int recursive;

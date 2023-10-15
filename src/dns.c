@@ -1,122 +1,99 @@
-#define _POSIX_C_SOURCE 200112L
 #include "dns.h"
 
-#define YES "Yes"
-#define NO "No"
-
-#define IPV6 (args.ipv6)
-#define IPV4 (!args.ipv6)
-#define ADDRSTRLEN (IPV6 ? INET6_ADDRSTRLEN : INET_ADDRSTRLEN)
-
-#define MAX_BUFF 65536
-
-const char* get_dns_class(unsigned short type);
-const char* get_dns_type(unsigned short type);
-void parse_domain_name(unsigned char* packet, unsigned char* buffer, char* result);
-void create_dns_query(args_t* args, unsigned char* query, char* domain);
-void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen);
-void compress(unsigned char* dest, char* src, int len);
-void compress_domain_name(unsigned char* dest, char* src);
-void print_rr(unsigned char* pointer, unsigned char* buffer, int n);
-void print_packet(unsigned char* packet, int len);
-void create_dns_reverse_query(args_t* args, unsigned char* query, char* domain);
-
-void print_packet(unsigned char* packet, int len) {
-    int i, j, cols;
-    for (i = 0; i < len; i += 16) {
-        printf("\n0x%04x:", i);
-
-        cols = i + 16;
-
-        for (j = i; j < cols; j++) {
-            if (j < len)
-                printf(" %02x", packet[j]);
-            else
-                printf("   ");
-        }
-        printf(" ");
-        for (j = i; cols < len ? j < cols : j < len; j++)
-            printf("%c", isprint(packet[j]) ? packet[j] : '.');
-    }
-    printf("\n");
-}
-// TODO Avoid DNSSEC
-// TODO 
 int main(int argc, char** argv) {
 
-    args_t args; // 
-    int err = 0; //
+    args_t args;
 
-    getopts(&args, argc, argv);
+    memset(&args, 0, sizeof(args_t));   // Reset args
 
-    char ip[ADDRSTRLEN];
-    unsigned char query[MAX_BUFF] = { 0 };
+    getopts(&args, argc, argv);         // Read and validate program arguments
 
-    struct addrinfo hints, * res;
+    int err = 0;                        // Error checking variable
 
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
+    struct addrinfo hints, *res;        // Hints and result list for getaddrinfo
 
+    memset(&hints, 0, sizeof(struct addrinfo));   // Reset hints
+    hints.ai_family = AF_UNSPEC;        // Allow IPV6 or IPV4
+    hints.ai_socktype = SOCK_DGRAM;     // UDP
+
+    // Get ip address of a specified dns server
     err = getaddrinfo(args.source_addr, args.port, &hints, &res);
     if (err) {
-        if (err == EAI_SYSTEM)
+        if (err == EAI_SYSTEM){
             exit_error(1, strerror(errno));
-        else
+        }
+        else{
             exit_error(1, gai_strerror(err));
+        }
     }
 
+    // Buffer for ip address of a specified dns server
+    char dns_addr[args.ipv6 ? INET6_ADDRSTRLEN : INET_ADDRSTRLEN];
+
+    // Save ip address of a dns server into the buffer
     if (res->ai_family == AF_INET6) {
         struct sockaddr_in6* ipv6 = (struct sockaddr_in6*)res->ai_addr;
-        inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip, INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, &(ipv6->sin6_addr), dns_addr, INET6_ADDRSTRLEN);
     }
     else if (res->ai_family == AF_INET) {
         struct sockaddr_in* ipv4 = (struct sockaddr_in*)res->ai_addr;
-        inet_ntop(AF_INET, &(ipv4->sin_addr), ip, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(ipv4->sin_addr), dns_addr, INET_ADDRSTRLEN);
     }
     else {
         exit_error(1, "Unsupported address family");
     }
 
-    if (args.reverse) {
-        create_dns_reverse_query(&args, query, args.target_addr);
-    }
-    else {
-        create_dns_query(&args, query, args.target_addr);
-    }
+    // Dns query buffer
+    unsigned char query[MAX_BUFF] = { 0 };
+
+    // Construct DNS query and save it into the buffer
+    create_dns_query(&args, query);
 
     const int dns_header_size = sizeof(dns_header_t);
     const int dns_question_size = sizeof(dns_question_t);
-    const int qname_size = (strlen((char*)(query + dns_header_size)) + 1);
+    const int qname_size = (strlen(((char*)query + dns_header_size)) + 1);
     const int query_size = (dns_header_size + qname_size + dns_question_size);
-    // printf("%d\n", qname_size);
-    // const int query_size = (dns_header_size + qname_size + sizeof(dns_rr_t) + 15);
 
-    print_packet(query, query_size);
+    // LOG packet
+    // print_packet(query, query_size);
 
     // Buffer to store received data
     unsigned char buffer[MAX_BUFF] = { 0 };
 
-    send_dns_query(res->ai_family, buffer, query, ip, query_size);
+    send_dns_query(res->ai_family, buffer, query, dns_addr, query_size);
 
+    // Clean up getaddrinfo
     freeaddrinfo(res);
-
 
     // Extract the DNS header
     dns_header_t* dns_header = (dns_header_t*)buffer;
+    
+    // TODO validate RCODE
+    printf("%d\n", dns_header->rcode);
 
+    // Extract the DNS question
     dns_question_t* dns_question = (dns_question_t*)(buffer + dns_header_size + qname_size);
 
-    unsigned char* pointer = (unsigned char*)(buffer + query_size);
+    unsigned short qtype = ntohs(dns_question->qtype);
+    unsigned short qclass = ntohs(dns_question->qclass);
 
-    printf("Authoritative: %s, Recursive: %s, Truncated: %s\n", dns_header->aa ? YES : NO, dns_header->rd ? YES : NO, dns_header->tc ? YES : NO);
+    // Set pointer to QNAME
+    unsigned char* pointer = (unsigned char*)(buffer + dns_header_size);
+
+    printf("Authoritative: %s, Recursive: %s, Truncated: %s\n",  bool_to_yes_no(dns_header->aa), bool_to_yes_no(dns_header->rd), bool_to_yes_no(dns_header->tc));
     printf("Question section (%d)\n", htons(dns_header->qdcount));
-    
-    printf(" %s, %s, %s\n", args.target_addr, get_dns_type(dns_question->qtype), get_dns_class(dns_question->qclass));
+
+    char qname[MAX_BUFF] = {0};
+
+    parse_domain_name(pointer, buffer, qname);
+
+    printf(" %s, %s, %s\n", qname, get_dns_type(qtype), get_dns_class(qclass));
+
+    pointer += qname_size + dns_question_size;
 
     printf("Answer section (%d)\n", htons(dns_header->ancount));
     print_rr(pointer, buffer, htons(dns_header->ancount));
-    
+
     printf("Authority section (%d)\n", htons(dns_header->nscount));
     print_rr(pointer, buffer, htons(dns_header->nscount));
 
@@ -126,54 +103,116 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-const char* get_dns_class(unsigned short class) {
-    return class_names[htons(class)];
-}
-
-const char* get_dns_type(unsigned short raw_type) {
-    return type_names[htons(raw_type)];
-}
-
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
     for (int i = 0; i < n; i++) {
         // Parse the name in the answer section
+        int len;
         char name[256] = { 0 };
-        dns_rr_t* dns_rr = (dns_rr_t*)(pointer + sizeof(short));
+
         parse_domain_name(pointer, buffer, name);
 
-        printf(" %s, %s, %s, %d, ", name, get_dns_type(dns_rr->type), get_dns_class(dns_rr->class), ntohl(dns_rr->ttl));
+        // printf("%s\n", name);
 
-        switch (ntohs(dns_rr->type)) {
-        case A:{
-            // Extract IPv4 address 
-            struct in_addr ipv4_addr;
-            memcpy(&ipv4_addr, pointer + sizeof(dns_rr_t), sizeof(struct in_addr));
-            char ip_address[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &ipv4_addr, ip_address, INET_ADDRSTRLEN);
-            printf("%s\n", ip_address);
-            break;
-        }
-        case CNAME:{
-            // Extract CNAME data
-            char cname[256] = { 0 };
-            parse_domain_name(pointer + sizeof(dns_rr_t), buffer, cname);
-            printf("%s\n", cname);
-            break;
-        }
-        case AAAA:{
-            struct in6_addr ipv6_addr;
-            memcpy(&ipv6_addr, pointer + sizeof(dns_rr_t), sizeof(struct in6_addr));
-            char ip_address[INET6_ADDRSTRLEN];
-            inet_ntop(AF_INET6, &ipv6_addr, ip_address, INET6_ADDRSTRLEN);
-            printf("%s\n", ip_address);
-            break;
-        }
-        default:
-            printf(" %s is not supported yet.\n", get_dns_type(ntohs(dns_rr->type)));
+        if ((*pointer & 192) == 192) {
+            // Compression: The domain name is a pointer
+            len = 2; // A pointer is 2 bytes long
+        } else {
+            // Regular Label: The domain name is not compressed
+            len = strlen(name) + 1;
         }
 
-        pointer += sizeof(dns_rr_t) + ntohs(dns_rr->data_len);
+        dns_rr_t* dns_rr = (dns_rr_t*)(pointer + len);
+
+        unsigned short rr_type = ntohs(dns_rr->type);
+        unsigned short rr_class = ntohs(dns_rr->class);
+        unsigned int rr_ttl = ntohl(dns_rr->ttl);
+
+        // printf("%d\n", rr_type);
+        // printf("%d\n", rr_class);
+        // printf("%d\n", ntohs(dns_rr->rdlength));
+
+        printf(" %s, %s, %s, %d, ", name, get_dns_type(rr_type), get_dns_class(rr_class), rr_ttl);
+
+        switch (rr_type) {
+            case A:
+                print_ipv4_data(pointer + len);
+                break;
+            case CNAME:
+            case PTR:
+                print_domain_name_data(pointer + len, buffer);
+                break;
+            case AAAA:
+                print_ipv6_data(pointer + len);
+                break;
+            case SOA:
+                print_soa_data(((unsigned char*)dns_rr + sizeof(dns_rr_t)), buffer);
+                break;
+            default:
+                printf("%s is not supported yet.\n", get_dns_type(rr_type));
+        }
+
+        pointer +=  len + sizeof(dns_rr_t) + ntohs(dns_rr->rdlength);
+
     }
+}
+
+void print_ipv4_data(unsigned char* pointer) {
+    struct in_addr ipv4_addr;
+    memcpy(&ipv4_addr, pointer + sizeof(dns_rr_t), sizeof(struct in_addr));
+    char ip_address[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ipv4_addr, ip_address, INET_ADDRSTRLEN);
+    printf("%s\n", ip_address);
+}
+
+void print_domain_name_data(unsigned char* pointer, unsigned char* buffer) {
+    char data[256] = { 0 };
+    parse_domain_name(pointer + sizeof(dns_rr_t), buffer, data);
+    printf("%s\n", data);
+}
+
+void print_ipv6_data(unsigned char* pointer) {
+    struct in6_addr ipv6_addr;
+    memcpy(&ipv6_addr, pointer + sizeof(dns_rr_t), sizeof(struct in6_addr));
+    char ip_address[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &ipv6_addr, ip_address, INET6_ADDRSTRLEN);
+    printf("%s\n", ip_address);
+}
+
+void print_soa_data(unsigned char* pointer, unsigned char* buffer) {
+    char mname[256] = { 0 };
+    char rname[256] = { 0 };
+
+    int mname_len, rname_len;
+
+    // printf("- %s\n", pointer - 135);
+
+    parse_domain_name(pointer, buffer, mname);
+    if ((*pointer & 192) == 192) {
+        // Compression: The domain name is a pointer
+        mname_len = 2; // A pointer is 2 bytes long
+    }
+    else {
+        // Regular Label: The domain name is not compressed
+        mname_len = strlen(mname) + 1;
+    }
+
+    parse_domain_name(pointer + mname_len, buffer, rname);
+    if ((*(pointer + mname_len) & 192) == 192) {
+        // Compression: The domain name is a pointer
+        rname_len = 2; // A pointer is 2 bytes long
+    }
+    else {
+        // Regular Label: The domain name is not compressed
+        rname_len = strlen(rname) + 1;
+    }
+    // printf("- %d\n", mname_len);
+
+    // printf("%s\n", rname);
+    // printf("- %d\n", rname_len);
+
+    dns_soa_t* soa = (dns_soa_t*)(pointer + mname_len + rname_len);
+
+    printf("%s, %s, %d, %d, %d, %d, %d\n", mname, rname, ntohl(soa->serial), ntohl(soa->refresh), ntohl(soa->retry), ntohl(soa->expire), ntohl(soa->min_ttl));
 }
 
 // TODO add port
@@ -185,7 +224,7 @@ void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, 
 
     struct sockaddr_storage server;
 
-    memset(&server, 0, sizeof(server));
+    memset(&server, 0, sizeof(struct sockaddr_storage));
 
     if (ai_family == AF_INET) {
         struct sockaddr_in* server4 = (struct sockaddr_in*)&server;
@@ -206,7 +245,7 @@ void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, 
         exit_error(1, "Socket creation failed");
     }
 
-    err = sendto(sockt, query, qlen, 0, (struct sockaddr*)&server, sizeof(server));
+    err = sendto(sockt, query, qlen, 0, (struct sockaddr*)&server, sizeof(struct sockaddr_storage));
     if (err == -1) {
         close(sockt);
         exit_error(1, "DNS query sendto failed");
@@ -274,10 +313,10 @@ void compress_domain_name(unsigned char* dest, char* src) {
     compress(dest + 1, src, 0);
 }
 
-void create_dns_query(args_t* args, unsigned char* query, char* domain) {
+void create_dns_query(args_t* args, unsigned char* query) {
     dns_header_t dns_header = {
         .id = htons(getpid()),      // Set the ID to X (you can change this value)
-        .qr = 0,                    // Query (0) or Response (1)
+        .qr = 0,                    // Query (0)
         .opcode = 0,                // Standard query (0)
         .aa = 0,                    // Authoritative (0)
         .tc = 0,                    // Truncated (0)
@@ -294,76 +333,45 @@ void create_dns_query(args_t* args, unsigned char* query, char* domain) {
     };
 
     // Combine header and question into the final query packet
-    memcpy(query, &dns_header, sizeof(dns_header));
-
+    memcpy(query, &dns_header, sizeof(dns_header_t));
+    
     unsigned char* qname = (unsigned char*)(query + sizeof(dns_header_t));
+    unsigned char qbuffer[MAX_BUFF] = {0};
 
-    compress_domain_name(qname, domain);
-
-    int len = strlen((char*)qname);
-
-    dns_question_t* qinfo = (dns_question_t*)(query + sizeof(dns_header_t) + len + 1);
-    qinfo->qtype = htons(args->ipv6 ? AAAA : args->reverse ? PTR : A); // TODO Set 5 to test CNAME
-    qinfo->qclass = htons(1);
-
-}
-
-void create_dns_reverse_query(args_t* args, unsigned char* query, char* domain) {
-    dns_header_t dns_header = {
-        .id = htons(getpid()),      // Set the ID to X (you can change this value)
-        .qr = 0,                    // Query (0) or Response (1)
-        .opcode = 0,                // Standard query (0)
-        .aa = 0,                    // Authoritative (0)
-        .tc = 0,                    // Truncated (0)
-        .rd = args->recursive,      // Recursion Desired (X)
-        .ra = 0,                    // Recursion Available (0)
-        .z = 0,                     // Reserved, set to 0
-        .cd = 0,
-        .ad = 0,
-        .rcode = 0,                 // Response code, set to 0 for a query
-        .qdcount = htons(1),        // Number of questions, in network byte order
-        .ancount = 0,               // Number of answers, set to 0 for a query
-        .nscount = 0,               // Number of authority records, set to 0 for a query
-        .arcount = 0                // Number of additional records, set to 0 for a query
-    };
-
-    // Combine header and question into the final query packet
-    memcpy(query, &dns_header, sizeof(dns_header));
-
-    unsigned char* qname = (unsigned char*)(query + sizeof(dns_header_t));
-
-    for (char* token = strtok(domain, "."); token != NULL; token = strtok(NULL, ".")) {
-        char buf[MAX_BUFF] = { 0 };
-
-        strcpy(buf, (char*)qname);
-        if (*buf != 0) {
-            sprintf((char*)qname, "%s.%s", token, buf);
-        }
-        else {
-            sprintf((char*)qname, "%s.", token);
-        }
+    if(args->reverse) {
+        // TODO here could be ipv6
+        reverse_dns_ipv4((char*)qbuffer, args->target_addr);
+    } else {
+        strcpy((char*)qbuffer, args->target_addr);
     }
 
-    char buf[MAX_BUFF] = { 0 };
-
-
-    strcat((char*)qname, "IN-ADDR.ARPA");
-
-    printf("%s\n", qname);
-
-    compress_domain_name((unsigned char*)buf, (char*)qname);
-
-    strcpy((char*)qname, buf);
-
-    for (int i = 0; i < (int)strlen((char*)qname); i++) {
-        printf("%d ", qname[i]);
-    }
-
-    printf("%s\n", qname);
+    compress_domain_name(qname, (char*)qbuffer);
 
     int len = strlen((char*)qname);
 
     dns_question_t* qinfo = (dns_question_t*)(qname + len + 1);
-    qinfo->qtype = htons(PTR); 
-    qinfo->qclass = htons(1); 
+    // TODO refactor
+    qinfo->qtype = htons(args->ipv6 ? AAAA : args->reverse ? PTR : A);
+    qinfo->qclass = htons(1);
+
 }
+
+void reverse_dns_ipv4(char* dest, char* addr) {
+    for (char* token = strtok(addr, "."); token != NULL; token = strtok(NULL, ".")) {
+        char buf[MAX_BUFF] = { 0 };
+
+        strcpy(buf, (char*)dest);
+        if (*buf != 0) {
+            sprintf((char*)dest, "%s.%s", token, buf);
+        }
+        else {
+            sprintf((char*)dest, "%s.", token);
+        }
+    }
+
+    strcat((char*)dest, "in-addr.arpa");
+}
+
+// void reverse_dns_ipv6(char* dest, char* addr){
+//     // TODO 
+// }
