@@ -58,3 +58,7 @@ void print_packet(unsigned char* packet, int len) {
 const char* bool_to_yes_no(int value) {
     return value ? "Yes" : "No";
 }
+
+int get_name_length(unsigned char* pointer_to_name, char* name) {
+    return (*pointer_to_name & 192) == 192 ? 2 : strlen(name) + 1;
+}

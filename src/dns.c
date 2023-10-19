@@ -105,31 +105,17 @@ int main(int argc, char** argv) {
 
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
     for (int i = 0; i < n; i++) {
-        // Parse the name in the answer section
-        int len;
         char name[256] = { 0 };
 
         parse_domain_name(pointer, buffer, name);
 
-        // printf("%s\n", name);
-
-        if ((*pointer & 192) == 192) {
-            // Compression: The domain name is a pointer
-            len = 2; // A pointer is 2 bytes long
-        } else {
-            // Regular Label: The domain name is not compressed
-            len = strlen(name) + 1;
-        }
+        int len = get_name_length(pointer, name);
 
         dns_rr_t* dns_rr = (dns_rr_t*)(pointer + len);
 
         unsigned short rr_type = ntohs(dns_rr->type);
         unsigned short rr_class = ntohs(dns_rr->class);
         unsigned int rr_ttl = ntohl(dns_rr->ttl);
-
-        // printf("%d\n", rr_type);
-        // printf("%d\n", rr_class);
-        // printf("%d\n", ntohs(dns_rr->rdlength));
 
         printf(" %s, %s, %s, %d, ", name, get_dns_type(rr_type), get_dns_class(rr_class), rr_ttl);
 
@@ -184,36 +170,18 @@ void print_soa_data(unsigned char* pointer, unsigned char* buffer) {
 
     int mname_len, rname_len;
 
-    // printf("- %s\n", pointer - 135);
-
     parse_domain_name(pointer, buffer, mname);
-    if ((*pointer & 192) == 192) {
-        // Compression: The domain name is a pointer
-        mname_len = 2; // A pointer is 2 bytes long
-    }
-    else {
-        // Regular Label: The domain name is not compressed
-        mname_len = strlen(mname) + 1;
-    }
+    mname_len = get_name_length(pointer, mname);
 
     parse_domain_name(pointer + mname_len, buffer, rname);
-    if ((*(pointer + mname_len) & 192) == 192) {
-        // Compression: The domain name is a pointer
-        rname_len = 2; // A pointer is 2 bytes long
-    }
-    else {
-        // Regular Label: The domain name is not compressed
-        rname_len = strlen(rname) + 1;
-    }
-    // printf("- %d\n", mname_len);
-
-    // printf("%s\n", rname);
-    // printf("- %d\n", rname_len);
+    rname_len = get_name_length(pointer + mname_len, rname);
 
     dns_soa_t* soa = (dns_soa_t*)(pointer + mname_len + rname_len);
 
     printf("%s, %s, %d, %d, %d, %d, %d\n", mname, rname, ntohl(soa->serial), ntohl(soa->refresh), ntohl(soa->retry), ntohl(soa->expire), ntohl(soa->min_ttl));
 }
+
+
 
 // TODO add port
 void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen) {

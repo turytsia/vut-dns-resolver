@@ -36,5 +36,6 @@ const char* get_dns_class(unsigned short class);
 const char* get_dns_type(unsigned short type);
 void print_packet(unsigned char* packet, int len);
 const char* bool_to_yes_no(int value);
+int get_name_length(unsigned char* pointer_to_name, char* name);
 
 #endif
