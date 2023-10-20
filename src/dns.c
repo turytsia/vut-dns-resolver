@@ -1,3 +1,15 @@
+/**
+ * @file dns.c
+ * @brief DNS Query Utility
+ *
+ * This C source file, "dns_query.c" provides a utility for sending DNS queries
+ * to a specified DNS server and processing the responses. It supports various query
+ * types, including A, AAAA, PTR queries, and reverse DNS queries. The utility allows
+ * you to query both IPv4 and IPv6 DNS servers.
+ *
+ * @author Oleksandr Turytsia (xturyt00)
+ * @date October 18, 2023
+ */
 #include "dns.h"
 
 int main(int argc, char** argv) {
@@ -6,9 +18,24 @@ int main(int argc, char** argv) {
 
     memset(&args, 0, sizeof(args_t));   // Reset args
 
-    getopts(&args, argc, argv);         // Read and validate program arguments
-
-    int err = 0;                        // Error checking variable
+    args_err_t args_err_code = getopts(&args, argc, argv);         // Read and validate program arguments
+    switch(args_err_code){
+        case E_UNKNOWN_OPT:
+            exit_error(args_err_code, "Unknown option");
+            break;
+        case E_PORT_INV:
+            exit_error(args_err_code, "Port is not valid (1-65535)");
+            break;
+        case E_PORT_MISS:
+            exit_error(args_err_code, "Port is missing for the option -p");
+            break;
+        case E_SRC_MISS:
+            exit_error(args_err_code, "Source address is missing for the options -s");
+            break;
+        case E_TGT_MISS:
+            exit_error(args_err_code, "Target address is not specified");
+            break;
+    }               
 
     struct addrinfo hints, *res;        // Hints and result list for getaddrinfo
 
@@ -17,13 +44,13 @@ int main(int argc, char** argv) {
     hints.ai_socktype = SOCK_DGRAM;     // UDP
 
     // Get ip address of a specified dns server
-    err = getaddrinfo(args.source_addr, args.port, &hints, &res);
+    int err = getaddrinfo(args.source_addr, args.port, &hints, &res);
     if (err) {
         if (err == EAI_SYSTEM){
-            exit_error(1, strerror(errno));
+            exit_error(E_EAI, strerror(errno));
         }
         else{
-            exit_error(1, gai_strerror(err));
+            exit_error(E_GAI, gai_strerror(err));
         }
     }
 
@@ -40,7 +67,7 @@ int main(int argc, char** argv) {
         inet_ntop(AF_INET, &(ipv4->sin_addr), dns_addr, INET_ADDRSTRLEN);
     }
     else {
-        exit_error(1, "Unsupported address family");
+        exit_error(E_FAMILY, "Unsupported address family");
     }
 
     // Dns query buffer
@@ -60,7 +87,25 @@ int main(int argc, char** argv) {
     // Buffer to store received data
     unsigned char buffer[MAX_BUFF] = { 0 };
 
-    send_dns_query(res->ai_family, buffer, query, dns_addr, query_size);
+    send_query_err_t send_err_code = send_dns_query(&args, res->ai_family, buffer, query, dns_addr, query_size);
+    switch(send_err_code){
+        case E_SOCK:
+            freeaddrinfo(res);
+            exit_error(send_err_code, "Socket creation failed");
+            break;
+        case E_SENDTO:
+            freeaddrinfo(res);
+            exit_error(send_err_code, "DNS query sendto failed");
+            break;
+        case E_TIMEOUT:
+            freeaddrinfo(res);
+            exit_error(send_err_code, "Receive timeout reached. No data received");
+            break;
+        case E_RECVFROM:
+            freeaddrinfo(res);
+            exit_error(send_err_code, "DNS query recvfrom failed");
+            break;
+    }
 
     // Clean up getaddrinfo
     freeaddrinfo(res);
@@ -68,8 +113,23 @@ int main(int argc, char** argv) {
     // Extract the DNS header
     dns_header_t* dns_header = (dns_header_t*)buffer;
     
-    // TODO validate RCODE
-    printf("%d\n", dns_header->rcode);
+    switch(dns_header->rcode){
+        case RCODE_FORMAT_ERROR:
+            exit_error(E_FORMAT, "RCODE 1, Format error");
+            break;
+        case RCODE_SERVER_FAILURE:
+            exit_error(E_SERVER_FAIL, "RCODE 2, Server failure");
+            break;
+        case RCODE_NAME_ERROR:
+            exit_error(E_NAME, "RCODE 3, Name error");
+            break;
+        case RCODE_NOT_IMPLEMENTED:
+            exit_error(E_NOT_IMPL, "RCODE 4, Not implemented");
+            break;
+        case RCODE_REFUCED:
+            exit_error(E_REFUSED, "RCODE 5, Refused");
+            break;
+    }
 
     // Extract the DNS question
     dns_question_t* dns_question = (dns_question_t*)(buffer + dns_header_size + qname_size);
@@ -105,30 +165,31 @@ int main(int argc, char** argv) {
 
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
     for (int i = 0; i < n; i++) {
-        char name[256] = { 0 };
+        char name[MAX_NAME] = { 0 };
 
         parse_domain_name(pointer, buffer, name);
 
-        int len = get_name_length(pointer, name);
+        pointer += get_name_length(pointer, name);
 
-        dns_rr_t* dns_rr = (dns_rr_t*)(pointer + len);
+        dns_rr_t* dns_rr = (dns_rr_t*)(pointer);
 
         unsigned short rr_type = ntohs(dns_rr->type);
         unsigned short rr_class = ntohs(dns_rr->class);
         unsigned int rr_ttl = ntohl(dns_rr->ttl);
+        unsigned short rr_rdlength = ntohs(dns_rr->rdlength);
 
         printf(" %s, %s, %s, %d, ", name, get_dns_type(rr_type), get_dns_class(rr_class), rr_ttl);
 
         switch (rr_type) {
             case A:
-                print_ipv4_data(pointer + len);
+                print_ipv4_data(pointer);
                 break;
             case CNAME:
             case PTR:
-                print_domain_name_data(pointer + len, buffer);
+                print_domain_name_data(pointer, buffer);
                 break;
             case AAAA:
-                print_ipv6_data(pointer + len);
+                print_ipv6_data(pointer);
                 break;
             case SOA:
                 print_soa_data(((unsigned char*)dns_rr + sizeof(dns_rr_t)), buffer);
@@ -137,8 +198,7 @@ void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
                 printf("%s is not supported yet.\n", get_dns_type(rr_type));
         }
 
-        pointer +=  len + sizeof(dns_rr_t) + ntohs(dns_rr->rdlength);
-
+        pointer +=  sizeof(dns_rr_t) + rr_rdlength;
     }
 }
 
@@ -151,7 +211,7 @@ void print_ipv4_data(unsigned char* pointer) {
 }
 
 void print_domain_name_data(unsigned char* pointer, unsigned char* buffer) {
-    char data[256] = { 0 };
+    char data[MAX_NAME] = { 0 };
     parse_domain_name(pointer + sizeof(dns_rr_t), buffer, data);
     printf("%s\n", data);
 }
@@ -165,8 +225,8 @@ void print_ipv6_data(unsigned char* pointer) {
 }
 
 void print_soa_data(unsigned char* pointer, unsigned char* buffer) {
-    char mname[256] = { 0 };
-    char rname[256] = { 0 };
+    char mname[MAX_NAME] = { 0 };
+    char rname[MAX_NAME] = { 0 };
 
     int mname_len, rname_len;
 
@@ -184,7 +244,7 @@ void print_soa_data(unsigned char* pointer, unsigned char* buffer) {
 
 
 // TODO add port
-void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen) {
+send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen) {
     int sockt;
     int err;
     socklen_t addr_len;
@@ -197,38 +257,46 @@ void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, 
     if (ai_family == AF_INET) {
         struct sockaddr_in* server4 = (struct sockaddr_in*)&server;
         server4->sin_family = AF_INET;
-        server4->sin_port = htons(53);
+        server4->sin_port = htons(atoi(args->port));
         inet_ntop(AF_INET, &server4->sin_addr, (char*)addr, INET_ADDRSTRLEN);
     }
     else {
         struct sockaddr_in6* server6 = (struct sockaddr_in6*)&server;
         server6->sin6_family = AF_INET6;
-        server6->sin6_port = htons(53);
+        server6->sin6_port = htons(atoi(args->port));
         inet_pton(AF_INET6, (char*)addr, &server6->sin6_addr);
     }
 
     sockt = socket(ai_family, SOCK_DGRAM, IPPROTO_UDP);
     if (sockt == -1) {
         close(sockt);
-        exit_error(1, "Socket creation failed");
+        return E_SOCK;
     }
+
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // Set the timeout in seconds
+    timeout.tv_usec = 0;
+    setsockopt(sockt, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
     err = sendto(sockt, query, qlen, 0, (struct sockaddr*)&server, sizeof(struct sockaddr_storage));
     if (err == -1) {
         close(sockt);
-        exit_error(1, "DNS query sendto failed");
+        return E_SENDTO;
     }
 
     addr_len = sizeof server;
     bytes_received = recvfrom(sockt, buffer, MAX_BUFF, 0, (struct sockaddr*)&server, &addr_len);
     if (bytes_received == -1) {
         close(sockt);
-        exit_error(1, "recvfrom");
-    }
-
-    print_packet(buffer, bytes_received);
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {;
+            return E_TIMEOUT;
+        } else {
+            return E_RECVFROM;
+        }
+    } 
 
     close(sockt);
+    return 0;
 }
 
 void parse_domain_name(unsigned char* rdata, unsigned char* buffer, char* result) {
@@ -339,7 +407,3 @@ void reverse_dns_ipv4(char* dest, char* addr) {
 
     strcat((char*)dest, "in-addr.arpa");
 }
-
-// void reverse_dns_ipv6(char* dest, char* addr){
-//     // TODO 
-// }

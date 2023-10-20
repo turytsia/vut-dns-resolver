@@ -1,3 +1,16 @@
+/**
+ * @file dns.h
+ * @brief DNS Query Utility Header
+ *
+ * This C header file, "dns.h," defines data structures and function prototypes used in
+ * the DNS query utility. It includes structures for DNS header, resource records, question
+ * sections, and SOA (Start of Authority) resource data. Additionally, it provides function
+ * declarations for DNS query creation, DNS query sending, parsing DNS responses, and various
+ * utility functions for working with DNS data.
+ *
+ * @author Oleksandr Turytsia (xturyt00)
+ * @date October 18, 2023
+ */
 #ifndef DNS_H
 #define DNS_H
 
@@ -16,8 +29,10 @@
 #include <netdb.h>
 #include <ctype.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #define MAX_BUFF 65536
+#define MAX_NAME 256
 
 // Header section format
 #pragma pack(1)
@@ -74,7 +89,7 @@ typedef struct {
 
 void parse_domain_name(unsigned char* packet, unsigned char* buffer, char* result);
 void create_dns_query(args_t* args, unsigned char* query);
-void send_dns_query(int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen);
+send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen);
 void compress(unsigned char* dest, char* src, int len);
 void compress_domain_name(unsigned char* dest, char* src);
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n);
