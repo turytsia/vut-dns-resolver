@@ -18,7 +18,8 @@ int main(int argc, char** argv) {
 
     memset(&args, 0, sizeof(args_t));   // Reset args
 
-    args_err_t args_err_code = getopts(&args, argc, argv);         // Read and validate program arguments
+    // Read and validate program arguments
+    args_err_t args_err_code = getopts(&args, argc, argv);
     switch(args_err_code){
         case E_UNKNOWN_OPT:
             exit_error(args_err_code, "Unknown option");
@@ -80,9 +81,6 @@ int main(int argc, char** argv) {
     const int dns_question_size = sizeof(dns_question_t);
     const int qname_size = (strlen(((char*)query + dns_header_size)) + 1);
     const int query_size = (dns_header_size + qname_size + dns_question_size);
-
-    // LOG packet
-    // print_packet(query, query_size);
 
     // Buffer to store received data
     unsigned char buffer[MAX_BUFF] = { 0 };
@@ -163,6 +161,16 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+/**
+ * @brief Print DNS Resource Records (RRs)
+ *
+ * This function prints DNS resource records (RRs) based on the information provided in the buffer.
+ * It iterates through the RRs and prints their details, such as name, type, class, TTL, and data content.
+ *
+ * @param pointer Pointer to the beginning of the RRs section.
+ * @param buffer Pointer to the DNS packet buffer.
+ * @param n Number of RRs to print.
+ */
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
     for (int i = 0; i < n; i++) {
         char name[MAX_NAME] = { 0 };
@@ -202,6 +210,13 @@ void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
     }
 }
 
+/**
+ * @brief Print IPv4 data from a DNS resource record (A record)
+ *
+ * This function prints the IPv4 address data from a DNS A record.
+ *
+ * @param pointer Pointer to the beginning of the RDATA section of the A record.
+ */
 void print_ipv4_data(unsigned char* pointer) {
     struct in_addr ipv4_addr;
     memcpy(&ipv4_addr, pointer + sizeof(dns_rr_t), sizeof(struct in_addr));
@@ -210,12 +225,27 @@ void print_ipv4_data(unsigned char* pointer) {
     printf("%s\n", ip_address);
 }
 
+/**
+ * @brief Print domain name data from a DNS resource record (CNAME or PTR record)
+ *
+ * This function prints the domain name data from a DNS CNAME or PTR record.
+ *
+ * @param pointer Pointer to the beginning of the RDATA section of the CNAME or PTR record.
+ * @param buffer Pointer to the DNS packet buffer.
+ */
 void print_domain_name_data(unsigned char* pointer, unsigned char* buffer) {
     char data[MAX_NAME] = { 0 };
     parse_domain_name(pointer + sizeof(dns_rr_t), buffer, data);
     printf("%s\n", data);
 }
 
+/**
+ * @brief Print IPv6 data from a DNS resource record (AAAA record)
+ *
+ * This function prints the IPv6 address data from a DNS AAAA record.
+ *
+ * @param pointer Pointer to the beginning of the RDATA section of the AAAA record.
+ */
 void print_ipv6_data(unsigned char* pointer) {
     struct in6_addr ipv6_addr;
     memcpy(&ipv6_addr, pointer + sizeof(dns_rr_t), sizeof(struct in6_addr));
@@ -224,6 +254,14 @@ void print_ipv6_data(unsigned char* pointer) {
     printf("%s\n", ip_address);
 }
 
+/**
+ * @brief Print SOA data from a DNS resource record (SOA record)
+ *
+ * This function prints the Start of Authority (SOA) data from a DNS SOA record.
+ *
+ * @param pointer Pointer to the beginning of the RDATA section of the SOA record.
+ * @param buffer Pointer to the DNS packet buffer.
+ */
 void print_soa_data(unsigned char* pointer, unsigned char* buffer) {
     char mname[MAX_NAME] = { 0 };
     char rname[MAX_NAME] = { 0 };
@@ -243,7 +281,19 @@ void print_soa_data(unsigned char* pointer, unsigned char* buffer) {
 
 
 
-// TODO add port
+/**
+ * @brief Send a DNS query to a server and receive a response.
+ *
+ * This function constructs a UDP socket, sends a DNS query to a server, and waits for a response.
+ *
+ * @param args Pointer to the program's command-line arguments.
+ * @param ai_family Address family (AF_INET for IPv4 or AF_INET6 for IPv6).
+ * @param buffer Pointer to the buffer for storing the received data.
+ * @param query Pointer to the DNS query.
+ * @param addr IP address of the target DNS server.
+ * @param qlen Length of the query.
+ * @return send_query_err_t indicating the result of the query operation.
+ */
 send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen) {
     int sockt;
     int err;
@@ -299,6 +349,16 @@ send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buff
     return 0;
 }
 
+/**
+ * @brief Parse a domain name from DNS response data.
+ *
+ * This function parses a domain name from DNS response data and constructs the result
+ * in a human-readable format. It handles both regular domain names and domain name compression.
+ *
+ * @param rdata Pointer to the DNS response data containing the domain name.
+ * @param buffer Pointer to the DNS response buffer for handling compression pointers.
+ * @param result Buffer to store the parsed domain name as a human-readable string.
+ */
 void parse_domain_name(unsigned char* rdata, unsigned char* buffer, char* result) {
     unsigned int position = 0;
     unsigned int len;
@@ -329,6 +389,18 @@ void parse_domain_name(unsigned char* rdata, unsigned char* buffer, char* result
     }
 }
 
+/**
+ * @brief Compress a domain name for DNS response data.
+ *
+ * P.s Im very proud creator of this function.
+ *
+ * This function compresses a domain name for inclusion in a DNS response by replacing
+ * consecutive periods with a single length byte and a pointer to the domain name's position.
+ *
+ * @param dest Pointer to the destination buffer where the compressed domain name is stored.
+ * @param src Pointer to the source domain name to be compressed.
+ * @param len Current length of the domain name part being processed.
+ */
 void compress(unsigned char* dest, char* src, int len) {
     if (*src == 0) {
         return;
@@ -344,28 +416,46 @@ void compress(unsigned char* dest, char* src, int len) {
     }
 }
 
+/**
+ * @brief Compress a domain name and store it in the destination buffer.
+ *
+ * This function prepares a domain name for compression and invokes the 'compress' function
+ * to compress it for inclusion in a DNS response. The result is stored in the destination buffer.
+ *
+ * @param dest Pointer to the destination buffer for the compressed domain name.
+ * @param src Pointer to the source domain name to be compressed.
+ */
 void compress_domain_name(unsigned char* dest, char* src) {
     strcat((char*)src, ".");
     compress(dest + 1, src, 0);
 }
 
+/**
+ * @brief Create a DNS query packet based on program arguments.
+ *
+ * This function constructs a DNS query packet based on the provided program arguments
+ * and stores it in the 'query' buffer.
+ *
+ * @param args Pointer to the program arguments structure.
+ * @param query Pointer to the buffer where the DNS query packet will be stored.
+ */
 void create_dns_query(args_t* args, unsigned char* query) {
     dns_header_t dns_header = {
         .id = htons(getpid()),      // Set the ID to X (you can change this value)
-        .qr = 0,                    // Query (0)
-        .opcode = 0,                // Standard query (0)
-        .aa = 0,                    // Authoritative (0)
-        .tc = 0,                    // Truncated (0)
-        .rd = args->recursive,      // Recursion Desired (X)
-        .ra = 0,                    // Recursion Available (0)
-        .z = 0,                     // Reserved, set to 0
+        .qr = 0,                    // Query
+        .opcode = 0,                // Standard query
+        .aa = 0,                    // Authoritative 
+        .tc = 0,                    // Truncated 
+        .rd = args->recursive,      // Recursion Desired
+        .ra = 0,                    // Recursion Available
+        .z = 0,                     // Reserved
         .cd = 0,
         .ad = 0,
-        .rcode = 0,                 // Response code, set to 0 for a query
+        .rcode = 0,                 // Response code
         .qdcount = htons(1),        // Number of questions, in network byte order
-        .ancount = 0,               // Number of answers, set to 0 for a query
-        .nscount = 0,               // Number of authority records, set to 0 for a query
-        .arcount = 0                // Number of additional records, set to 0 for a query
+        .ancount = 0,               // Number of answers
+        .nscount = 0,               // Number of authority records
+        .arcount = 0                // Number of additional records
     };
 
     // Combine header and question into the final query packet
@@ -375,7 +465,6 @@ void create_dns_query(args_t* args, unsigned char* query) {
     unsigned char qbuffer[MAX_BUFF] = {0};
 
     if(args->reverse) {
-        // TODO here could be ipv6
         reverse_dns_ipv4((char*)qbuffer, args->target_addr);
     } else {
         strcpy((char*)qbuffer, args->target_addr);
@@ -386,12 +475,21 @@ void create_dns_query(args_t* args, unsigned char* query) {
     int len = strlen((char*)qname);
 
     dns_question_t* qinfo = (dns_question_t*)(qname + len + 1);
-    // TODO refactor
+
     qinfo->qtype = htons(args->ipv6 ? AAAA : args->reverse ? PTR : A);
     qinfo->qclass = htons(1);
 
 }
 
+/**
+ * @brief Create a reverse DNS domain name for an IPv4 address.
+ *
+ * This function generates a reverse DNS domain name for the given IPv4 address and
+ * stores it in the 'dest' buffer.
+ *
+ * @param dest Pointer to the destination buffer where the reverse DNS domain name will be stored.
+ * @param addr Pointer to the IPv4 address to be reversed.
+ */
 void reverse_dns_ipv4(char* dest, char* addr) {
     for (char* token = strtok(addr, "."); token != NULL; token = strtok(NULL, ".")) {
         char buf[MAX_BUFF] = { 0 };

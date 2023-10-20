@@ -37,7 +37,7 @@
 // Header section format
 #pragma pack(1)
 typedef struct {
-    unsigned short id: 16;          // DNS Identifier (16 bits)
+    unsigned short id: 16;          // DNS Identifier
 
     unsigned char rd : 1;           // Recursion Desired
     unsigned char tc : 1;           // Truncated Response
@@ -48,7 +48,7 @@ typedef struct {
     unsigned char rcode : 4;        // Response Code
     unsigned char cd : 1;           // Checking Disabled
     unsigned char ad : 1;           // Authenticated Data
-    unsigned char z : 1;            // Reserved (should be 0)
+    unsigned char z : 1;            // Reserved
     unsigned char ra : 1;           // Recursion Available
 
     unsigned short qdcount : 16;    // Question Count

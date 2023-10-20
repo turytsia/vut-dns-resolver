@@ -23,6 +23,26 @@
  * @author Oleksandr Turytsia (xturyt00)
  * @date October 18, 2023
  */
+
+ /**
+  * @brief Parse Command Line Arguments and Initialize `args_t` Structure
+  *
+  * This function parses command line arguments provided to the program, processes them, and initializes
+  * the `args_t` structure accordingly. It handles various command-line options and their associated values,
+  * ensuring proper argument validation and processing.
+  *
+  * @param args Pointer to an `args_t` structure where the parsed arguments will be stored.
+  * @param argc Number of command line arguments.
+  * @param argv Array of command line argument strings.
+  *
+  * @return An `args_err_t` value indicating the result of argument parsing:
+  * - `0` if the arguments are parsed successfully.
+  * - `E_UNKNOWN_OPT` if an unknown option is encountered.
+  * - `E_PORT_INV` if the port value is not within the valid range [1, 65535].
+  * - `E_PORT_MISS` if the port option is missing an associated value.
+  * - `E_SRC_MISS` if the source address option is missing an associated value.
+  * - `E_TGT_MISS` if the target address is not specified.
+  */
 args_err_t getopts(args_t* args, int argc, char** argv) {
 
     // Set up default arguments

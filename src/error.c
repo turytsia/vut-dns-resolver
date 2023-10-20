@@ -13,6 +13,14 @@
  */
 #include "error.h"
 
+ /**
+  * @brief Exit the program with an error message and code.
+  *
+  * This function is responsible for exiting the program with an error message and the provided error code.
+  *
+  * @param err The error code to be returned to the system.
+  * @param message A descriptive error message to be printed to the standard error stream.
+  */
 void exit_error(int err, const char* message) {
     fprintf(stderr, "Error: %s\n", message);
     exit(err);
