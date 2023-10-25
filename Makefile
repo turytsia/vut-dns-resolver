@@ -5,14 +5,14 @@ CFLAGS=-Wall -Wextra -Werror -std=c99 -pedantic -Wmissing-prototypes -Wstrict-pr
 
 ifeq ($(OS),Windows_NT)
 run:
-	echo "Not supported."
+	@echo "Not supported."
 else
 run:
-	$(CC) $(CFLAGS) $(shell find ./* -name '*.c') -o $(OUT)
+	@$(CC) $(CFLAGS) $(shell find ./* -name '*.c') -o $(OUT)
 endif
 
 test: # chmod +x test.sh
-	bash ./test.sh
+	@bash ./test.sh
 
 clean:
-	rm dns
+	@rm dns
