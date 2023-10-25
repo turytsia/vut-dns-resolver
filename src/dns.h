@@ -92,7 +92,7 @@ void create_dns_query(args_t* args, unsigned char* query);
 send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen);
 void compress(unsigned char* dest, char* src, int len);
 void compress_domain_name(unsigned char* dest, char* src);
-void print_rr(unsigned char* pointer, unsigned char* buffer, int n);
+void print_rr(unsigned char* pointer, unsigned char* buffer, int n, int is_test);
 void reverse_dns_ipv6(char* dest, char* addr);
 void reverse_dns_ipv4(char* dest, char* addr);
 

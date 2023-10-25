@@ -53,15 +53,31 @@ args_err_t getopts(args_t* args, int argc, char** argv) {
         const char* arg = argv[i];
         
         if (strcmp(arg, "-r") == 0) {
+            if (args->recursive == 1) {
+                return E_OPT_DOUBLE;
+            }
+
             args->recursive = 1;
         }
         else if (strcmp(arg, "-6") == 0) {
+            if (args->ipv6 == 1) {
+                return E_OPT_DOUBLE;
+            }
+
             args->ipv6 = 1;
         }
         else if (strcmp(arg, "-x") == 0) {
+            if (args->reverse == 1) {
+                return E_OPT_DOUBLE;
+            }
+
             args->reverse = 1;
         }
         else if (strcmp(arg, "-s") == 0) {
+            if (strlen(args->source_addr) != 0) {
+                return E_OPT_DOUBLE;
+            }
+
             if (i + 1 >= argc) {
                 return E_SRC_MISS;
             }
@@ -81,6 +97,13 @@ args_err_t getopts(args_t* args, int argc, char** argv) {
 
             strcpy(args->port, argv[i]);
         }
+        else if (strcmp(arg, "-t") == 0) {
+            if (args->test == 1) {
+                return E_OPT_DOUBLE;
+            }
+
+            args->test = 1;
+        }
         else if (i == argc - 1) {
             strcpy(args->target_addr, arg);
         }
@@ -91,6 +114,10 @@ args_err_t getopts(args_t* args, int argc, char** argv) {
 
     if (strlen(args->target_addr) == 0) {
         return E_TGT_MISS;
+    }
+
+    if (strlen(args->source_addr) == 0) {
+        return E_SRC_MISS;
     }
 
     return 0;

@@ -29,6 +29,7 @@ typedef struct {
     int recursive;
     int reverse;
     int ipv6;
+    int test;
     char port[256];
     char source_addr[256];
     char target_addr[256];

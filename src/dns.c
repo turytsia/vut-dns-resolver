@@ -36,7 +36,10 @@ int main(int argc, char** argv) {
         case E_TGT_MISS:
             exit_error(args_err_code, "Target address is not specified");
             break;
-    }               
+        case E_OPT_DOUBLE:
+            exit_error(args_err_code, "You have specified the same option twice");
+            break;
+    }
 
     struct addrinfo hints, *res;        // Hints and result list for getaddrinfo
 
@@ -150,13 +153,13 @@ int main(int argc, char** argv) {
     pointer += qname_size + dns_question_size;
 
     printf("Answer section (%d)\n", htons(dns_header->ancount));
-    print_rr(pointer, buffer, htons(dns_header->ancount));
+    print_rr(pointer, buffer, htons(dns_header->ancount), args.test);
 
     printf("Authority section (%d)\n", htons(dns_header->nscount));
-    print_rr(pointer, buffer, htons(dns_header->nscount));
+    print_rr(pointer, buffer, htons(dns_header->nscount), args.test);
 
     printf("Additional section (%d)\n", htons(dns_header->arcount));
-    print_rr(pointer, buffer, htons(dns_header->arcount));
+    print_rr(pointer, buffer, htons(dns_header->arcount), args.test);
 
     return 0;
 }
@@ -171,7 +174,7 @@ int main(int argc, char** argv) {
  * @param buffer Pointer to the DNS packet buffer.
  * @param n Number of RRs to print.
  */
-void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
+void print_rr(unsigned char* pointer, unsigned char* buffer, int n, int is_test) {
     for (int i = 0; i < n; i++) {
         char name[MAX_NAME] = { 0 };
 
@@ -186,7 +189,7 @@ void print_rr(unsigned char* pointer, unsigned char* buffer, int n) {
         unsigned int rr_ttl = ntohl(dns_rr->ttl);
         unsigned short rr_rdlength = ntohs(dns_rr->rdlength);
 
-        printf(" %s, %s, %s, %d, ", name, get_dns_type(rr_type), get_dns_class(rr_class), rr_ttl);
+        printf(" %s, %s, %s, %d, ", name, get_dns_type(rr_type), get_dns_class(rr_class), is_test ? 0 : rr_ttl);
 
         switch (rr_type) {
             case A:

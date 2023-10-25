@@ -22,7 +22,8 @@ typedef enum {
     E_PORT_INV = 2,
     E_PORT_MISS = 3,
     E_SRC_MISS = 4,
-    E_TGT_MISS = 5
+    E_TGT_MISS = 5,
+    E_OPT_DOUBLE = 6
 } args_err_t;
 
 typedef enum {

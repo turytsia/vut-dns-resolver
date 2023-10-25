@@ -11,5 +11,8 @@ run:
 	$(CC) $(CFLAGS) $(shell find ./* -name '*.c') -o $(OUT)
 endif
 
+test: # chmod +x test.sh
+	bash ./test.sh
+
 clean:
-	echo "No tests"
+	rm dns
