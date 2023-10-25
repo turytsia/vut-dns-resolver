@@ -59,6 +59,19 @@ args_err_t getopts(args_t* args, int argc, char** argv) {
 
             args->recursive = 1;
         }
+        else if(strcmp(arg, "-h") == 0){
+            printf(
+                "-r: Recursion Desired (Recursion Desired = 1), otherwise no recursion.\n"
+                "\b-x: Reverse query instead of direct query.\n"
+                "\b-6: Query type AAAA instead of the default A.\n"
+                "\b-s: IP address or domain name of the server to which the query should be sent.\n"
+                "\b-p port: The port number to send the query to, default 53.\n"
+                "\b-t: Enables testing mode (TTL is hidden).\n"
+                "\b-h: Show this message.\n"
+                "\baddress: The address to be queried.");
+            exit(0);
+            return 0;
+        }
         else if (strcmp(arg, "-6") == 0) {
             if (args->ipv6 == 1) {
                 return E_OPT_DOUBLE;
