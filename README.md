@@ -1,9 +1,28 @@
 # DNS Resolver
 
+**Author**: Oleksandr Turytsia <br />
+**Created at**: 11/17/2023
+
+A simple DNS resolver, implemented in C, that performs the task of translating human-readable domain names into IP addresses.
+
+It supports such query types as `A`, `AAAA`, `PTR`. And response type `A`, `AAAA`, `PTR`, `CNAME` and `SOA`.
+
+## Files
+Source code for this project is located at `src/` folder. I should contain following files:
+- args.c = Source file, that contains functions to parse input arguments
+- args.h = Header file for `args.c`
+- dns.c = Source file of a program. Main is located here.
+- dns.h = Header file for `dns.h`
+- error.c = Source file, that contains error handling function
+- error.h = Header file for `error.c`
+- libs.h = Header file with all the libs
+- utils.c = Source file, that contains common functions for multiple source files
+- utils.h = Header file for `utils.c`
+ 
 ## Prerequisites
 Before using the DNS resolver, make sure you have the following prerequisites installed:
-- GCC (Tested version 10.5.0)
-- Unix-based system (Tested on FreeBSD)
+- GCC (Testing was done for the version 10.5.0)
+- Unix-based system (Testing was done on FreeBSD)
 
 ## Installation
 All the source code is located at src folder. Run following command in order to compile the project:
@@ -21,15 +40,15 @@ After the project is compiled, you can run following command to run a quick test
 ./dns [−r] [−x] [−h] [−t] [−6] −s server [−p port] address
 ```
 - `-r`: Recursion Desired (Recursion Desired = 1), otherwise no recursion.
-- `-x`: Reverse query instead of direct query.
 - `-6`: Query type AAAA instead of the default A.
-- `-s server`: IP address or domain name of the server to which the query should be sent.
-- `-p port`: The port number to send the query to, default 53.
+- `-x`: Reverse query instead of direct query. Note, user can specify here ipv6 or ipv4 address without specifying `-6` option to make a reverse query.
+- `-s server`: IP address or domain name of the server to which the query should be sent. Note, user can specify `server` by its domain or ipv6 address.
+- `-p port`: The port number to send the query to, default is set to 53.
 - `-h`: Display help info.
-- `-t`: Enables testing mode (TTL is hidden).
+- `-t`: Enables testing mode (TTL is set to 0).
 - `address`: The address to be queried
 
-# Output
+## Output
 The program will construct dns query based on user’s input and send packet over udp to a specified dns server. Dns response may have following format:
 
 ```bash
@@ -43,7 +62,7 @@ Authority section (N)
 [ADDRESS], [TYPE], [CLASS], [TTL], [RDATA]
 ...
 Additional section (N)
-[ ADDRESS ] , [ TYPE ] , [ CLASS ] , [ TTL ] , [ RDATA ]
+[ ADDRESS ], [TYPE], [CLASS], [TTL], [RDATA]
 ...
 ```
 
@@ -79,3 +98,4 @@ codes that correspond RFC 1035 documentation):
 ## Bibliography
 
 [RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035)
+[RFC 3596](https://datatracker.ietf.org/doc/html/rfc3596)
