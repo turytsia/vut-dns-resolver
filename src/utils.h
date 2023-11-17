@@ -27,10 +27,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
+#include "libs.h"
 
 typedef enum {
     A = 1,

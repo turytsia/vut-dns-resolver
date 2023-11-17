@@ -1,0 +1,8 @@
+Authoritative: No, Recursive: Yes, Truncated: No
+Question section (1)
+ 4.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.6.0.8.0.d.0.0.4.0.5.4.1.0.0.a.2.ip6.arpa., PTR, IN
+Answer section (2)
+ 4.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.6.0.8.0.d.0.0.4.0.5.4.1.0.0.a.2.ip6.arpa., PTR, IN, 0, bud02s33-in-x04.1e100.net.
+ 4.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.6.0.8.0.d.0.0.4.0.5.4.1.0.0.a.2.ip6.arpa., PTR, IN, 0, bud02s21-in-x04.1e100.net.
+Authority section (0)
+Additional section (0)

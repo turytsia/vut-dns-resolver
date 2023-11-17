@@ -14,8 +14,7 @@
 #ifndef ERROR_H
 #define ERROR_H
 
-#include <stdlib.h>
-#include <stdio.h>
+#include "libs.h"
 
 typedef enum {
     E_UNKNOWN_OPT = 1,

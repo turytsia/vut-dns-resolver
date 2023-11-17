@@ -18,12 +18,8 @@
 #ifndef ARGS_H
 #define ARGS_H
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <arpa/inet.h>
-
 #include "error.h"
+#include "libs.h"
 
 typedef struct {
     int recursive;

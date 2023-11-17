@@ -1,0 +1,7 @@
+Authoritative: No, Recursive: Yes, Truncated: No
+Question section (1)
+ 8.8.8.8.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.8.4.0.6.8.4.1.0.0.2.ip6.arpa., PTR, IN
+Answer section (1)
+ 8.8.8.8.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.8.4.0.6.8.4.1.0.0.2.ip6.arpa., PTR, IN, 0, dns.google.
+Authority section (0)
+Additional section (0)

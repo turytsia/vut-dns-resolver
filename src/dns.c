@@ -15,8 +15,7 @@
 int main(int argc, char** argv) {
 
     args_t args;
-
-    memset(&args, 0, sizeof(args_t));   // Reset args
+    memset(&args, 0, sizeof(args_t));
 
     // Read and validate program arguments
     args_err_t args_err_code = getopts(&args, argc, argv);
@@ -48,7 +47,7 @@ int main(int argc, char** argv) {
     hints.ai_socktype = SOCK_DGRAM;     // UDP
 
     // Get ip address of a specified dns server
-    int err = getaddrinfo(args.source_addr, args.port, &hints, &res);
+    int err = getaddrinfo(args.source_addr, NULL, &hints, &res);
     if (err) {
         if (err == EAI_SYSTEM){
             exit_error(E_EAI, strerror(errno));
@@ -59,7 +58,7 @@ int main(int argc, char** argv) {
     }
 
     // Buffer for ip address of a specified dns server
-    char dns_addr[args.ipv6 ? INET6_ADDRSTRLEN : INET_ADDRSTRLEN];
+    char dns_addr[res->ai_family == AF_INET6 ? INET6_ADDRSTRLEN : INET_ADDRSTRLEN];
 
     // Save ip address of a dns server into the buffer
     if (res->ai_family == AF_INET6) {
@@ -175,22 +174,28 @@ int main(int argc, char** argv) {
  * @param n Number of RRs to print.
  */
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n, int is_test) {
+    // Iterate through each Resource Record (RR) in a specific section
     for (int i = 0; i < n; i++) {
+        // Initialize a buffer to store the parsed domain name
         char name[MAX_NAME] = { 0 };
 
+        // Parse the domain name and update the pointer accordingly
         parse_domain_name(pointer, buffer, name);
-
         pointer += get_name_length(pointer, name);
 
+        // Access the DNS Resource Record structure at the current pointer position
         dns_rr_t* dns_rr = (dns_rr_t*)(pointer);
 
+        // Extract and convert RR type, class, TTL, and RD length to host byte order
         unsigned short rr_type = ntohs(dns_rr->type);
         unsigned short rr_class = ntohs(dns_rr->class);
         unsigned int rr_ttl = ntohl(dns_rr->ttl);
         unsigned short rr_rdlength = ntohs(dns_rr->rdlength);
 
+        // Print RR information: name, type, class, TTL, and data
         printf(" %s, %s, %s, %d, ", name, get_dns_type(rr_type), get_dns_class(rr_class), is_test ? 0 : rr_ttl);
 
+        // Based on the RR type, print the associated data
         switch (rr_type) {
             case A:
                 print_ipv4_data(pointer);
@@ -209,7 +214,8 @@ void print_rr(unsigned char* pointer, unsigned char* buffer, int n, int is_test)
                 printf("%s is not supported yet.\n", get_dns_type(rr_type));
         }
 
-        pointer +=  sizeof(dns_rr_t) + rr_rdlength;
+        // Move the pointer to the next RR by adding the size of RR header and RD length
+        pointer += sizeof(dns_rr_t) + rr_rdlength;
     }
 }
 
@@ -303,10 +309,12 @@ send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buff
     socklen_t addr_len;
     ssize_t bytes_received;
 
+    // Create a sockaddr_storage structure to store server information
     struct sockaddr_storage server;
 
     memset(&server, 0, sizeof(struct sockaddr_storage));
 
+    // Fill in server information based on the address family
     if (ai_family == AF_INET) {
         struct sockaddr_in* server4 = (struct sockaddr_in*)&server;
         server4->sin_family = AF_INET;
@@ -320,34 +328,46 @@ send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buff
         inet_pton(AF_INET6, (char*)addr, &server6->sin6_addr);
     }
 
+    // Create a UDP socket
     sockt = socket(ai_family, SOCK_DGRAM, IPPROTO_UDP);
     if (sockt == -1) {
         close(sockt);
         return E_SOCK;
     }
 
+    // Set a timeout for the socket to handle potential delays
     struct timeval timeout;
-    timeout.tv_sec = 5;  // Set the timeout in seconds
+    timeout.tv_sec = 5;  // 5 secs
     timeout.tv_usec = 0;
     setsockopt(sockt, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
-    err = sendto(sockt, query, qlen, 0, (struct sockaddr*)&server, sizeof(struct sockaddr_storage));
-    if (err == -1) {
+    // Determine the size of the sockaddr structure based on the address family
+    int sockaddr_size = ai_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+
+    // Send the DNS query to the server
+    err = sendto(sockt, query, qlen, 0, (struct sockaddr*)&server, sockaddr_size);
+    if (err < 0) {
+        perror("sendto failed");
         close(sockt);
         return E_SENDTO;
     }
 
+    // Receive the DNS response from the server
     addr_len = sizeof server;
     bytes_received = recvfrom(sockt, buffer, MAX_BUFF, 0, (struct sockaddr*)&server, &addr_len);
     if (bytes_received == -1) {
         close(sockt);
-        if (errno == EWOULDBLOCK || errno == EAGAIN) {;
+
+        // Check for timeout errors, handle accordingly
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            ;
             return E_TIMEOUT;
         } else {
             return E_RECVFROM;
         }
     } 
 
+    // Close the socket and return success
     close(sockt);
     return 0;
 }
@@ -393,33 +413,6 @@ void parse_domain_name(unsigned char* rdata, unsigned char* buffer, char* result
 }
 
 /**
- * @brief Compress a domain name for DNS response data.
- *
- * P.s Im very proud creator of this function.
- *
- * This function compresses a domain name for inclusion in a DNS response by replacing
- * consecutive periods with a single length byte and a pointer to the domain name's position.
- *
- * @param dest Pointer to the destination buffer where the compressed domain name is stored.
- * @param src Pointer to the source domain name to be compressed.
- * @param len Current length of the domain name part being processed.
- */
-void compress(unsigned char* dest, char* src, int len) {
-    if (*src == 0) {
-        return;
-    }
-
-    if (*src == '.') {
-        *(dest - len - 1) = len;
-        compress(dest + 1, src + 1, 0);
-    }
-    else {
-        *dest = *src;
-        compress(dest + 1, src + 1, len + 1);
-    }
-}
-
-/**
  * @brief Compress a domain name and store it in the destination buffer.
  *
  * This function prepares a domain name for compression and invokes the 'compress' function
@@ -429,8 +422,45 @@ void compress(unsigned char* dest, char* src, int len) {
  * @param src Pointer to the source domain name to be compressed.
  */
 void compress_domain_name(unsigned char* dest, char* src) {
+    // Append a dot to the source domain name to ensure proper compression
+    // Because the 'compress' function needs to detect a dot
     strcat((char*)src, ".");
+    // Invoke the 'compress' function to compress the domain name recursively
     compress(dest + 1, src, 0);
+}
+
+/**
+ * @brief Compress a domain name for DNS response data.
+ *
+ * P.s Im very proud creator of this function.
+ *
+ * This function compresses a domain name for inclusion in a DNS response by replacing
+ * consecutive periods with a single length byte and a pointer to the domain name's position.
+ *
+ * @example www.google.com => 3www6google3com
+ *
+ * @param dest Pointer to the destination buffer where the compressed domain name is stored.
+ * @param src Pointer to the source domain name to be compressed.
+ * @param len Current length of the domain name part being processed.
+ */
+void compress(unsigned char* dest, char* src, int len) {
+    // If the current character is null, return, indicating the end of the domain name
+    if (*src == 0) {
+        return;
+    }
+
+    // If the current character is a dot, encode the length of the section and continue compression
+    if (*src == '.') {
+        *(dest - len - 1) = len;
+        // Continue compression after the dot and reset length for the next token
+        compress(dest + 1, src + 1, 0);
+    }
+    // If the current character is not a dot, copy it to the destination buffer and continue compression
+    else {
+        *dest = *src;
+        // Continue compression with an increased length
+        compress(dest + 1, src + 1, len + 1);
+    }
 }
 
 /**
@@ -443,8 +473,9 @@ void compress_domain_name(unsigned char* dest, char* src) {
  * @param query Pointer to the buffer where the DNS query packet will be stored.
  */
 void create_dns_query(args_t* args, unsigned char* query) {
+    // Initialize the DNS header
     dns_header_t dns_header = {
-        .id = htons(getpid()),      // Set the ID to X (you can change this value)
+        .id = htons(getpid()),      // Identificator
         .qr = 0,                    // Query
         .opcode = 0,                // Standard query
         .aa = 0,                    // Authoritative 
@@ -461,26 +492,41 @@ void create_dns_query(args_t* args, unsigned char* query) {
         .arcount = 0                // Number of additional records
     };
 
-    // Combine header and question into the final query packet
+    // Copy the DNS header into the query buffer
     memcpy(query, &dns_header, sizeof(dns_header_t));
-    
+
+    // Set up pointers for the question section and a buffer for domain name compression
     unsigned char* qname = (unsigned char*)(query + sizeof(dns_header_t));
     unsigned char qbuffer[MAX_BUFF] = {0};
 
-    if(args->reverse) {
-        reverse_dns_ipv4((char*)qbuffer, args->target_addr);
-    } else {
+    // Generate the question section based on the specified target address
+    if (args->reverse) {
+        // Determine whether the target address is IPv4 or IPv6 and generate the reverse address format accordingly
+        if (is_ipv4(args->target_addr)) {
+            reverse_dns_ipv4((char*)qbuffer, args->target_addr);
+        }
+        else {
+            reverse_dns_ipv6((char*)qbuffer, args->target_addr);
+        }
+    }
+    else {
+        // For non-reverse queries, simply copy the target address to the buffer
         strcpy((char*)qbuffer, args->target_addr);
+        
     }
 
+    // Compress the domain name in the question section
     compress_domain_name(qname, (char*)qbuffer);
 
+    // Calculate the length of the compressed domain name
     int len = strlen((char*)qname);
 
+    // Set up the DNS question structure in the query buffer
     dns_question_t* qinfo = (dns_question_t*)(qname + len + 1);
 
+    // Set the query type and class based on the specified arguments
     qinfo->qtype = htons(args->ipv6 ? AAAA : args->reverse ? PTR : A);
-    qinfo->qclass = htons(1);
+    qinfo->qclass = htons(1);   // Internet class (IN) by default
 
 }
 
@@ -494,17 +540,110 @@ void create_dns_query(args_t* args, unsigned char* query) {
  * @param addr Pointer to the IPv4 address to be reversed.
  */
 void reverse_dns_ipv4(char* dest, char* addr) {
+    // Iterate through each octet of the IPv4 address using dots as delimiters
     for (char* token = strtok(addr, "."); token != NULL; token = strtok(NULL, ".")) {
+
+        // Create a temporary buffer to hold the current state of the reversed DNS name
         char buf[MAX_BUFF] = { 0 };
 
+        // Copy the current state of the reversed DNS name into the temporary buffer
         strcpy(buf, (char*)dest);
+
+        // If the temporary buffer is not empty, append a dot before adding the current octet
         if (*buf != 0) {
             sprintf((char*)dest, "%s.%s", token, buf);
         }
+        // If the temporary buffer is empty, add the current octet without a preceding dot (first octet only)
         else {
             sprintf((char*)dest, "%s.", token);
         }
     }
 
-    strcat((char*)dest, "in-addr.arpa");
+    // Add ipv4 prefix
+    strcat((char*)dest, IPV4_REVERSE_PREFIX);
+}
+
+/**
+ * @brief Check if the given address is an IPv4 address.
+ *
+ * This function checks whether the given address is an IPv4 address by
+ * looking for the presence of a colon (':' character).
+ *
+ * @param addr Pointer to the address to be checked.
+ * @return True if it is an IPv4 address, false otherwise.
+ */
+int is_ipv4(char* addr) {
+    while (*addr != '\0') {
+        if (*addr == ':') {
+            return 0;  // Found a colon, not an IPv4 address
+        }
+        addr++;
+    }
+    return 1;  // No colon found, likely an IPv4 address
+}
+
+/**
+ * @brief Count the number of compressed sections in an IPv6 address.
+ *
+ * This function takes an IPv6 address as input and counts the number of compressed
+ * sections in the address.
+ *
+ * @param addr Pointer to the IPv6 address to be analyzed.
+ * @return The number of compressed sections in the IPv6 address.
+ */
+int compressed_sections_ipv6(char* addr) {
+    // Count of sections (default = 1)
+    int sections = 1;
+
+    // Create a buffer to store a copy of the original address for tokenization with strtok
+    char buff[MAX_BUFF] = { 0 };
+
+    // Copy the content of the original address to the buffer
+    strcpy(buff, addr);
+
+    // Tokenize the buffer using colons as delimiters
+    char* token = strtok(buff, ":");
+
+    // Iterate through the remaining tokens to count the number of sections
+    while ((token = strtok(NULL, ":")) != NULL) sections++;
+
+    return sections;
+}
+
+/**
+ * @brief Create a reverse DNS domain name for an IPv6 address.
+ *
+ * This function generates a reverse DNS domain name for the given IPv6 address and
+ * stores it in the 'dest' buffer.
+ *
+ * @param dest Pointer to the destination buffer where the reverse DNS domain name will be stored.
+ * @param addr Pointer to the IPv6 address to be reversed.
+ */
+void reverse_dns_ipv6(char* dest, char* addr) {
+    for (int i = strlen(addr) - 1, j = 0; i >= 0; i--) {
+
+        // Copy existing section
+        while (i >= 0 && addr[i] != ':') {
+            dest[j++] = addr[i--];
+            dest[j++] = '.';
+        }
+
+        // Calculate number of missed zeros in a section
+        int miss = (int)(j / 2) % MAX_IPV6_SECTION_LENGTH;
+        int zeros = miss > 0 ? MAX_IPV6_SECTION_LENGTH - miss : 0;
+
+        // Detect compression
+        if (i > 0 && addr[i] == ':' && addr[i - 1] == ':') {
+            zeros = MAX_IPV6_SECTION_LENGTH * (MAX_IPV6_SECTIONS - compressed_sections_ipv6(addr));
+        }
+
+        // Add compressed zeros
+        for (int l = 0; l < zeros; l++) {
+            dest[j++] = '0';
+            dest[j++] = '.';
+        } 
+    }
+
+    // Add ipv6 prefix
+    strcat((char*)dest, IPV6_REVERSE_PREFIX);
 }

@@ -14,25 +14,17 @@
 #ifndef DNS_H
 #define DNS_H
 
-#define _POSIX_C_SOURCE 200112L
-
 #include "args.h"
 #include "utils.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <ctype.h>
-#include <errno.h>
-#include <sys/time.h>
+#include "libs.h"
 
 #define MAX_BUFF 65536
 #define MAX_NAME 256
+#define MAX_IPV6_SECTIONS 8
+#define MAX_IPV6_SECTION_LENGTH 4
+
+#define IPV4_REVERSE_PREFIX "in-addr.arpa"
+#define IPV6_REVERSE_PREFIX "ip6.arpa"
 
 // Header section format
 #pragma pack(1)
@@ -92,9 +84,12 @@ void create_dns_query(args_t* args, unsigned char* query);
 send_query_err_t send_dns_query(args_t* args, int ai_family, unsigned char* buffer, unsigned char* query, char* addr, int qlen);
 void compress(unsigned char* dest, char* src, int len);
 void compress_domain_name(unsigned char* dest, char* src);
+
 void print_rr(unsigned char* pointer, unsigned char* buffer, int n, int is_test);
+int compressed_sections_ipv6(char* addr);
 void reverse_dns_ipv6(char* dest, char* addr);
 void reverse_dns_ipv4(char* dest, char* addr);
+int is_ipv4(char* addr);
 
 void print_ipv4_data(unsigned char* pointer);
 void print_ipv6_data(unsigned char* pointer);
